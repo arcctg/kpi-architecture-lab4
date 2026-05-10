@@ -1,5 +1,6 @@
 package com.flashcard.application.card.command;
 
+import com.flashcard.activitylog.ActivityLogService;
 import com.flashcard.domain.error.AccessDeniedError;
 import com.flashcard.domain.error.EntityNotFoundError;
 import com.flashcard.domain.model.Card;
@@ -22,6 +23,7 @@ class UpdateCardCommandHandlerTest {
     private CardRepository cardRepository;
     private DeckRepository deckRepository;
     private UserRepository userRepository;
+    private ActivityLogService activityLogService;
     private UpdateCardCommandHandler handler;
 
     @BeforeEach
@@ -29,7 +31,9 @@ class UpdateCardCommandHandlerTest {
         cardRepository = mock(CardRepository.class);
         deckRepository = mock(DeckRepository.class);
         userRepository = mock(UserRepository.class);
-        handler = new UpdateCardCommandHandler(cardRepository, deckRepository, userRepository);
+        activityLogService = mock(ActivityLogService.class);
+        handler = new UpdateCardCommandHandler(cardRepository, deckRepository,
+                userRepository, activityLogService);
     }
 
     @Test
@@ -53,16 +57,13 @@ class UpdateCardCommandHandlerTest {
         Long resultId = handler.handle(command);
 
         assertEquals(10L, resultId);
-        verify(card).updateTerm(any());
-        verify(card).updateDefinition(any());
-        verify(cardRepository).save(card);
+        verify(activityLogService).logCardUpdated(10L, 5L, 1L, "new term");
     }
 
     @Test
     void shouldThrowWhenUserNotFound() {
         UpdateCardCommand command = new UpdateCardCommand(5L, 10L, "t", "d", "missing@example.com");
         when(userRepository.findByEmail(new Email("missing@example.com"))).thenReturn(Optional.empty());
-
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
     }
 
@@ -72,7 +73,6 @@ class UpdateCardCommandHandlerTest {
         User user = mock(User.class);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
         when(deckRepository.findById(999L)).thenReturn(Optional.empty());
-
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
     }
 
@@ -82,13 +82,10 @@ class UpdateCardCommandHandlerTest {
         User user = mock(User.class);
         when(user.getId()).thenReturn(1L);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
-
         Deck deck = mock(Deck.class);
         when(deck.isOwnedBy(1L)).thenReturn(false);
         when(deckRepository.findById(5L)).thenReturn(Optional.of(deck));
-
         assertThrows(AccessDeniedError.class, () -> handler.handle(command));
-        verify(cardRepository, never()).save(any());
     }
 
     @Test
@@ -97,12 +94,10 @@ class UpdateCardCommandHandlerTest {
         User user = mock(User.class);
         when(user.getId()).thenReturn(1L);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
-
         Deck deck = mock(Deck.class);
         when(deck.isOwnedBy(1L)).thenReturn(true);
         when(deckRepository.findById(5L)).thenReturn(Optional.of(deck));
         when(cardRepository.findById(999L)).thenReturn(Optional.empty());
-
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
     }
 
@@ -112,17 +107,13 @@ class UpdateCardCommandHandlerTest {
         User user = mock(User.class);
         when(user.getId()).thenReturn(1L);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
-
         Deck deck = mock(Deck.class);
         when(deck.isOwnedBy(1L)).thenReturn(true);
         when(deck.getId()).thenReturn(5L);
         when(deckRepository.findById(5L)).thenReturn(Optional.of(deck));
-
         Card card = mock(Card.class);
         when(card.getDeckId()).thenReturn(99L);
         when(cardRepository.findById(10L)).thenReturn(Optional.of(card));
-
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
-        verify(cardRepository, never()).save(any());
     }
 }

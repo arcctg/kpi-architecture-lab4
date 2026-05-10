@@ -1,5 +1,6 @@
 package com.flashcard.application.deck.command;
 
+import com.flashcard.activitylog.ActivityLogService;
 import com.flashcard.domain.error.EntityNotFoundError;
 import com.flashcard.domain.factory.DeckFactory;
 import com.flashcard.domain.model.Deck;
@@ -21,6 +22,7 @@ class CreateDeckCommandHandlerTest {
     private DeckFactory deckFactory;
     private DeckRepository deckRepository;
     private UserRepository userRepository;
+    private ActivityLogService activityLogService;
     private CreateDeckCommandHandler handler;
 
     @BeforeEach
@@ -28,7 +30,9 @@ class CreateDeckCommandHandlerTest {
         deckFactory = mock(DeckFactory.class);
         deckRepository = mock(DeckRepository.class);
         userRepository = mock(UserRepository.class);
-        handler = new CreateDeckCommandHandler(deckFactory, deckRepository, userRepository);
+        activityLogService = mock(ActivityLogService.class);
+        handler = new CreateDeckCommandHandler(deckFactory, deckRepository,
+                userRepository, activityLogService);
     }
 
     @Test
@@ -47,6 +51,7 @@ class CreateDeckCommandHandlerTest {
 
         assertEquals(10L, resultId);
         verify(deckRepository).save(deck);
+        verify(activityLogService).logDeckCreated(10L, 1L, "Title");
     }
 
     @Test
@@ -56,5 +61,26 @@ class CreateDeckCommandHandlerTest {
 
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
         verify(deckRepository, never()).save(any());
+        verify(activityLogService, never()).logDeckCreated(anyLong(), anyLong(), anyString());
+    }
+
+    @Test
+    void shouldSucceedEvenWhenActivityLogFails() {
+        CreateDeckCommand command = new CreateDeckCommand("Title", "Desc", "user@example.com");
+        User user = mock(User.class);
+        when(user.getId()).thenReturn(1L);
+        when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
+
+        Deck deck = mock(Deck.class);
+        when(deckFactory.create(any(DeckTitle.class), eq("Desc"), eq(1L))).thenReturn(deck);
+        when(deckRepository.save(deck)).thenReturn(deck);
+        when(deck.getId()).thenReturn(10L);
+
+        doThrow(new RuntimeException("DB down")).when(activityLogService)
+                .logDeckCreated(anyLong(), anyLong(), anyString());
+
+        Long resultId = handler.handle(command);
+
+        assertEquals(10L, resultId);
     }
 }

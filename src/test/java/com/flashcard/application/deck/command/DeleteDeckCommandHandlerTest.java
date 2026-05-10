@@ -1,5 +1,6 @@
 package com.flashcard.application.deck.command;
 
+import com.flashcard.activitylog.ActivityLogService;
 import com.flashcard.domain.error.AccessDeniedError;
 import com.flashcard.domain.error.EntityNotFoundError;
 import com.flashcard.domain.model.Deck;
@@ -19,13 +20,15 @@ class DeleteDeckCommandHandlerTest {
 
     private DeckRepository deckRepository;
     private UserRepository userRepository;
+    private ActivityLogService activityLogService;
     private DeleteDeckCommandHandler handler;
 
     @BeforeEach
     void setUp() {
         deckRepository = mock(DeckRepository.class);
         userRepository = mock(UserRepository.class);
-        handler = new DeleteDeckCommandHandler(deckRepository, userRepository);
+        activityLogService = mock(ActivityLogService.class);
+        handler = new DeleteDeckCommandHandler(deckRepository, userRepository, activityLogService);
     }
 
     @Test
@@ -37,11 +40,13 @@ class DeleteDeckCommandHandlerTest {
 
         Deck deck = mock(Deck.class);
         when(deck.isOwnedBy(1L)).thenReturn(true);
+        when(deck.getId()).thenReturn(5L);
         when(deckRepository.findById(5L)).thenReturn(Optional.of(deck));
 
         handler.handle(command);
 
         verify(deckRepository).delete(deck);
+        verify(activityLogService).logDeckDeleted(5L, 1L);
     }
 
     @Test

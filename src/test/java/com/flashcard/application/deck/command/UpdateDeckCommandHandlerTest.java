@@ -1,5 +1,6 @@
 package com.flashcard.application.deck.command;
 
+import com.flashcard.activitylog.ActivityLogService;
 import com.flashcard.domain.error.AccessDeniedError;
 import com.flashcard.domain.error.EntityNotFoundError;
 import com.flashcard.domain.model.Deck;
@@ -19,13 +20,15 @@ class UpdateDeckCommandHandlerTest {
 
     private DeckRepository deckRepository;
     private UserRepository userRepository;
+    private ActivityLogService activityLogService;
     private UpdateDeckCommandHandler handler;
 
     @BeforeEach
     void setUp() {
         deckRepository = mock(DeckRepository.class);
         userRepository = mock(UserRepository.class);
-        handler = new UpdateDeckCommandHandler(deckRepository, userRepository);
+        activityLogService = mock(ActivityLogService.class);
+        handler = new UpdateDeckCommandHandler(deckRepository, userRepository, activityLogService);
     }
 
     @Test
@@ -47,6 +50,7 @@ class UpdateDeckCommandHandlerTest {
         verify(deck).updateTitle(any());
         verify(deck).updateDescription("New Desc");
         verify(deckRepository).save(deck);
+        verify(activityLogService).logDeckUpdated(5L, 1L, "New Title");
     }
 
     @Test

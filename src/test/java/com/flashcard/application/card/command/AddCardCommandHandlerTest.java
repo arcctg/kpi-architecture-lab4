@@ -1,5 +1,6 @@
 package com.flashcard.application.card.command;
 
+import com.flashcard.activitylog.ActivityLogService;
 import com.flashcard.domain.error.AccessDeniedError;
 import com.flashcard.domain.error.EntityNotFoundError;
 import com.flashcard.domain.factory.CardFactory;
@@ -26,6 +27,7 @@ class AddCardCommandHandlerTest {
     private CardRepository cardRepository;
     private DeckRepository deckRepository;
     private UserRepository userRepository;
+    private ActivityLogService activityLogService;
     private AddCardCommandHandler handler;
 
     @BeforeEach
@@ -34,7 +36,9 @@ class AddCardCommandHandlerTest {
         cardRepository = mock(CardRepository.class);
         deckRepository = mock(DeckRepository.class);
         userRepository = mock(UserRepository.class);
-        handler = new AddCardCommandHandler(cardFactory, cardRepository, deckRepository, userRepository);
+        activityLogService = mock(ActivityLogService.class);
+        handler = new AddCardCommandHandler(cardFactory, cardRepository,
+                deckRepository, userRepository, activityLogService);
     }
 
     @Test
@@ -57,6 +61,7 @@ class AddCardCommandHandlerTest {
 
         assertEquals(20L, resultId);
         verify(cardRepository).save(card);
+        verify(activityLogService).logCardAdded(20L, 5L, 1L, "term");
     }
 
     @Test
