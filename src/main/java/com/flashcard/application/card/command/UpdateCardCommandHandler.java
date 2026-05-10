@@ -1,5 +1,6 @@
 package com.flashcard.application.card.command;
 
+import com.flashcard.activitylog.ActivityLogService;
 import com.flashcard.domain.error.AccessDeniedError;
 import com.flashcard.domain.error.EntityNotFoundError;
 import com.flashcard.domain.model.Card;
@@ -11,6 +12,8 @@ import com.flashcard.domain.repository.UserRepository;
 import com.flashcard.domain.valueobject.CardDefinition;
 import com.flashcard.domain.valueobject.CardTerm;
 import com.flashcard.domain.valueobject.Email;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,16 +21,21 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class UpdateCardCommandHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(UpdateCardCommandHandler.class);
+
     private final CardRepository cardRepository;
     private final DeckRepository deckRepository;
     private final UserRepository userRepository;
+    private final ActivityLogService activityLogService;
 
     public UpdateCardCommandHandler(CardRepository cardRepository,
                                     DeckRepository deckRepository,
-                                    UserRepository userRepository) {
+                                    UserRepository userRepository,
+                                    ActivityLogService activityLogService) {
         this.cardRepository = cardRepository;
         this.deckRepository = deckRepository;
         this.userRepository = userRepository;
+        this.activityLogService = activityLogService;
     }
 
     public Long handle(UpdateCardCommand command) {
@@ -54,6 +62,14 @@ public class UpdateCardCommandHandler {
         card.updateDefinition(definition);
 
         Card saved = cardRepository.save(card);
+
+        try {
+            activityLogService.logCardUpdated(saved.getId(), command.deckId(),
+                    owner.getId(), command.term());
+        } catch (Exception e) {
+            log.warn("Failed to log card update activity", e);
+        }
+
         return saved.getId();
     }
 }
