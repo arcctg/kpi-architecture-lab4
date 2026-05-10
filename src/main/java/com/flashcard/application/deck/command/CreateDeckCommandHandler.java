@@ -1,7 +1,8 @@
 package com.flashcard.application.deck.command;
 
-import com.flashcard.activitylog.ActivityLogService;
+import com.flashcard.application.port.EventPublisher;
 import com.flashcard.domain.error.EntityNotFoundError;
+import com.flashcard.domain.event.DeckCreated;
 import com.flashcard.domain.factory.DeckFactory;
 import com.flashcard.domain.model.Deck;
 import com.flashcard.domain.model.User;
@@ -9,30 +10,28 @@ import com.flashcard.domain.repository.DeckRepository;
 import com.flashcard.domain.repository.UserRepository;
 import com.flashcard.domain.valueobject.DeckTitle;
 import com.flashcard.domain.valueobject.Email;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 
 @Service
 @Transactional
 public class CreateDeckCommandHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(CreateDeckCommandHandler.class);
-
     private final DeckFactory deckFactory;
     private final DeckRepository deckRepository;
     private final UserRepository userRepository;
-    private final ActivityLogService activityLogService;
+    private final EventPublisher eventPublisher;
 
     public CreateDeckCommandHandler(DeckFactory deckFactory,
                                     DeckRepository deckRepository,
                                     UserRepository userRepository,
-                                    ActivityLogService activityLogService) {
+                                    EventPublisher eventPublisher) {
         this.deckFactory = deckFactory;
         this.deckRepository = deckRepository;
         this.userRepository = userRepository;
-        this.activityLogService = activityLogService;
+        this.eventPublisher = eventPublisher;
     }
 
     public Long handle(CreateDeckCommand command) {
@@ -43,12 +42,9 @@ public class CreateDeckCommandHandler {
         Deck deck = deckFactory.create(deckTitle, command.description(), owner.getId());
         Deck saved = deckRepository.save(deck);
 
-        try {
-            activityLogService.logDeckCreated(saved.getId(), owner.getId(),
-                    command.title());
-        } catch (Exception e) {
-            log.warn("Failed to log deck creation activity", e);
-        }
+        eventPublisher.publish(new DeckCreated(
+                saved.getId(), command.title(), command.description(),
+                owner.getId(), LocalDateTime.now()));
 
         return saved.getId();
     }

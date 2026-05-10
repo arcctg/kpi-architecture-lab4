@@ -1,8 +1,9 @@
 package com.flashcard.application.card.command;
 
-import com.flashcard.activitylog.ActivityLogService;
+import com.flashcard.application.port.EventPublisher;
 import com.flashcard.domain.error.AccessDeniedError;
 import com.flashcard.domain.error.EntityNotFoundError;
+import com.flashcard.domain.event.CardDeleted;
 import com.flashcard.domain.model.Card;
 import com.flashcard.domain.model.Deck;
 import com.flashcard.domain.model.User;
@@ -10,30 +11,28 @@ import com.flashcard.domain.repository.CardRepository;
 import com.flashcard.domain.repository.DeckRepository;
 import com.flashcard.domain.repository.UserRepository;
 import com.flashcard.domain.valueobject.Email;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 
 @Service
 @Transactional
 public class DeleteCardCommandHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(DeleteCardCommandHandler.class);
-
     private final CardRepository cardRepository;
     private final DeckRepository deckRepository;
     private final UserRepository userRepository;
-    private final ActivityLogService activityLogService;
+    private final EventPublisher eventPublisher;
 
     public DeleteCardCommandHandler(CardRepository cardRepository,
                                     DeckRepository deckRepository,
                                     UserRepository userRepository,
-                                    ActivityLogService activityLogService) {
+                                    EventPublisher eventPublisher) {
         this.cardRepository = cardRepository;
         this.deckRepository = deckRepository;
         this.userRepository = userRepository;
-        this.activityLogService = activityLogService;
+        this.eventPublisher = eventPublisher;
     }
 
     public void handle(DeleteCardCommand command) {
@@ -57,10 +56,7 @@ public class DeleteCardCommandHandler {
         Long cardId = card.getId();
         cardRepository.delete(card);
 
-        try {
-            activityLogService.logCardDeleted(cardId, command.deckId(), owner.getId());
-        } catch (Exception e) {
-            log.warn("Failed to log card deletion activity", e);
-        }
+        eventPublisher.publish(new CardDeleted(
+                cardId, command.deckId(), owner.getId(), LocalDateTime.now()));
     }
 }

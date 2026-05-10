@@ -1,8 +1,9 @@
 package com.flashcard.application.card.command;
 
-import com.flashcard.activitylog.ActivityLogService;
+import com.flashcard.application.port.EventPublisher;
 import com.flashcard.domain.error.AccessDeniedError;
 import com.flashcard.domain.error.EntityNotFoundError;
+import com.flashcard.domain.event.CardAdded;
 import com.flashcard.domain.factory.CardFactory;
 import com.flashcard.domain.model.Card;
 import com.flashcard.domain.model.Deck;
@@ -13,33 +14,31 @@ import com.flashcard.domain.repository.UserRepository;
 import com.flashcard.domain.valueobject.CardDefinition;
 import com.flashcard.domain.valueobject.CardTerm;
 import com.flashcard.domain.valueobject.Email;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 
 @Service
 @Transactional
 public class AddCardCommandHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(AddCardCommandHandler.class);
-
     private final CardFactory cardFactory;
     private final CardRepository cardRepository;
     private final DeckRepository deckRepository;
     private final UserRepository userRepository;
-    private final ActivityLogService activityLogService;
+    private final EventPublisher eventPublisher;
 
     public AddCardCommandHandler(CardFactory cardFactory,
                                  CardRepository cardRepository,
                                  DeckRepository deckRepository,
                                  UserRepository userRepository,
-                                 ActivityLogService activityLogService) {
+                                 EventPublisher eventPublisher) {
         this.cardFactory = cardFactory;
         this.cardRepository = cardRepository;
         this.deckRepository = deckRepository;
         this.userRepository = userRepository;
-        this.activityLogService = activityLogService;
+        this.eventPublisher = eventPublisher;
     }
 
     public Long handle(AddCardCommand command) {
@@ -58,12 +57,9 @@ public class AddCardCommandHandler {
         Card card = cardFactory.create(cardTerm, cardDefinition, command.deckId());
         Card saved = cardRepository.save(card);
 
-        try {
-            activityLogService.logCardAdded(saved.getId(), command.deckId(),
-                    owner.getId(), command.term());
-        } catch (Exception e) {
-            log.warn("Failed to log card addition activity", e);
-        }
+        eventPublisher.publish(new CardAdded(
+                saved.getId(), command.deckId(), command.term(),
+                command.definition(), owner.getId(), LocalDateTime.now()));
 
         return saved.getId();
     }
