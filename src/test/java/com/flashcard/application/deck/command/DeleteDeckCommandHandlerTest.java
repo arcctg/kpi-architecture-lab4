@@ -1,6 +1,6 @@
 package com.flashcard.application.deck.command;
 
-import com.flashcard.activitylog.ActivityLogService;
+import com.flashcard.application.port.EventPublisher;
 import com.flashcard.domain.error.AccessDeniedError;
 import com.flashcard.domain.error.EntityNotFoundError;
 import com.flashcard.domain.model.Deck;
@@ -20,24 +20,23 @@ class DeleteDeckCommandHandlerTest {
 
     private DeckRepository deckRepository;
     private UserRepository userRepository;
-    private ActivityLogService activityLogService;
+    private EventPublisher eventPublisher;
     private DeleteDeckCommandHandler handler;
 
     @BeforeEach
     void setUp() {
         deckRepository = mock(DeckRepository.class);
         userRepository = mock(UserRepository.class);
-        activityLogService = mock(ActivityLogService.class);
-        handler = new DeleteDeckCommandHandler(deckRepository, userRepository, activityLogService);
+        eventPublisher = mock(EventPublisher.class);
+        handler = new DeleteDeckCommandHandler(deckRepository, userRepository, eventPublisher);
     }
 
     @Test
-    void shouldDeleteDeck() {
+    void shouldDeleteDeckAndPublishEvent() {
         DeleteDeckCommand command = new DeleteDeckCommand(5L, "user@example.com");
         User user = mock(User.class);
         when(user.getId()).thenReturn(1L);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
-
         Deck deck = mock(Deck.class);
         when(deck.isOwnedBy(1L)).thenReturn(true);
         when(deck.getId()).thenReturn(5L);
@@ -46,16 +45,15 @@ class DeleteDeckCommandHandlerTest {
         handler.handle(command);
 
         verify(deckRepository).delete(deck);
-        verify(activityLogService).logDeckDeleted(5L, 1L);
+        verify(eventPublisher).publish(any());
     }
 
     @Test
     void shouldThrowWhenUserNotFound() {
         DeleteDeckCommand command = new DeleteDeckCommand(5L, "missing@example.com");
         when(userRepository.findByEmail(new Email("missing@example.com"))).thenReturn(Optional.empty());
-
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
-        verify(deckRepository, never()).delete(any());
+        verify(eventPublisher, never()).publish(any());
     }
 
     @Test
@@ -64,7 +62,6 @@ class DeleteDeckCommandHandlerTest {
         User user = mock(User.class);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
         when(deckRepository.findById(999L)).thenReturn(Optional.empty());
-
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
     }
 
@@ -74,12 +71,10 @@ class DeleteDeckCommandHandlerTest {
         User user = mock(User.class);
         when(user.getId()).thenReturn(1L);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
-
         Deck deck = mock(Deck.class);
         when(deck.isOwnedBy(1L)).thenReturn(false);
         when(deckRepository.findById(5L)).thenReturn(Optional.of(deck));
-
         assertThrows(AccessDeniedError.class, () -> handler.handle(command));
-        verify(deckRepository, never()).delete(any());
+        verify(eventPublisher, never()).publish(any());
     }
 }

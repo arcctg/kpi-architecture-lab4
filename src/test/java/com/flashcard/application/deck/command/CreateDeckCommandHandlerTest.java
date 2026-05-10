@@ -1,7 +1,8 @@
 package com.flashcard.application.deck.command;
 
-import com.flashcard.activitylog.ActivityLogService;
+import com.flashcard.application.port.EventPublisher;
 import com.flashcard.domain.error.EntityNotFoundError;
+import com.flashcard.domain.event.DeckCreated;
 import com.flashcard.domain.factory.DeckFactory;
 import com.flashcard.domain.model.Deck;
 import com.flashcard.domain.model.User;
@@ -22,7 +23,7 @@ class CreateDeckCommandHandlerTest {
     private DeckFactory deckFactory;
     private DeckRepository deckRepository;
     private UserRepository userRepository;
-    private ActivityLogService activityLogService;
+    private EventPublisher eventPublisher;
     private CreateDeckCommandHandler handler;
 
     @BeforeEach
@@ -30,9 +31,9 @@ class CreateDeckCommandHandlerTest {
         deckFactory = mock(DeckFactory.class);
         deckRepository = mock(DeckRepository.class);
         userRepository = mock(UserRepository.class);
-        activityLogService = mock(ActivityLogService.class);
+        eventPublisher = mock(EventPublisher.class);
         handler = new CreateDeckCommandHandler(deckFactory, deckRepository,
-                userRepository, activityLogService);
+                userRepository, eventPublisher);
     }
 
     @Test
@@ -51,21 +52,10 @@ class CreateDeckCommandHandlerTest {
 
         assertEquals(10L, resultId);
         verify(deckRepository).save(deck);
-        verify(activityLogService).logDeckCreated(10L, 1L, "Title");
     }
 
     @Test
-    void shouldThrowWhenUserNotFound() {
-        CreateDeckCommand command = new CreateDeckCommand("Title", "Desc", "missing@example.com");
-        when(userRepository.findByEmail(new Email("missing@example.com"))).thenReturn(Optional.empty());
-
-        assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
-        verify(deckRepository, never()).save(any());
-        verify(activityLogService, never()).logDeckCreated(anyLong(), anyLong(), anyString());
-    }
-
-    @Test
-    void shouldSucceedEvenWhenActivityLogFails() {
+    void shouldPublishDeckCreatedEvent() {
         CreateDeckCommand command = new CreateDeckCommand("Title", "Desc", "user@example.com");
         User user = mock(User.class);
         when(user.getId()).thenReturn(1L);
@@ -76,11 +66,22 @@ class CreateDeckCommandHandlerTest {
         when(deckRepository.save(deck)).thenReturn(deck);
         when(deck.getId()).thenReturn(10L);
 
-        doThrow(new RuntimeException("DB down")).when(activityLogService)
-                .logDeckCreated(anyLong(), anyLong(), anyString());
+        handler.handle(command);
 
-        Long resultId = handler.handle(command);
+        verify(eventPublisher).publish(argThat(event -> {
+            DeckCreated e = (DeckCreated) event;
+            return e.deckId().equals(10L) && e.ownerId().equals(1L)
+                    && e.title().equals("Title");
+        }));
+    }
 
-        assertEquals(10L, resultId);
+    @Test
+    void shouldThrowWhenUserNotFound() {
+        CreateDeckCommand command = new CreateDeckCommand("Title", "Desc", "missing@example.com");
+        when(userRepository.findByEmail(new Email("missing@example.com"))).thenReturn(Optional.empty());
+
+        assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
+        verify(deckRepository, never()).save(any());
+        verify(eventPublisher, never()).publish(any());
     }
 }

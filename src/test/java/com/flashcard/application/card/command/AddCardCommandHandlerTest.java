@@ -1,8 +1,9 @@
 package com.flashcard.application.card.command;
 
-import com.flashcard.activitylog.ActivityLogService;
+import com.flashcard.application.port.EventPublisher;
 import com.flashcard.domain.error.AccessDeniedError;
 import com.flashcard.domain.error.EntityNotFoundError;
+import com.flashcard.domain.event.CardAdded;
 import com.flashcard.domain.factory.CardFactory;
 import com.flashcard.domain.model.Card;
 import com.flashcard.domain.model.Deck;
@@ -27,7 +28,7 @@ class AddCardCommandHandlerTest {
     private CardRepository cardRepository;
     private DeckRepository deckRepository;
     private UserRepository userRepository;
-    private ActivityLogService activityLogService;
+    private EventPublisher eventPublisher;
     private AddCardCommandHandler handler;
 
     @BeforeEach
@@ -36,22 +37,20 @@ class AddCardCommandHandlerTest {
         cardRepository = mock(CardRepository.class);
         deckRepository = mock(DeckRepository.class);
         userRepository = mock(UserRepository.class);
-        activityLogService = mock(ActivityLogService.class);
+        eventPublisher = mock(EventPublisher.class);
         handler = new AddCardCommandHandler(cardFactory, cardRepository,
-                deckRepository, userRepository, activityLogService);
+                deckRepository, userRepository, eventPublisher);
     }
 
     @Test
-    void shouldAddCardAndReturnId() {
+    void shouldAddCardAndPublishEvent() {
         AddCardCommand command = new AddCardCommand(5L, "term", "definition", "user@example.com");
         User user = mock(User.class);
         when(user.getId()).thenReturn(1L);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
-
         Deck deck = mock(Deck.class);
         when(deck.isOwnedBy(1L)).thenReturn(true);
         when(deckRepository.findById(5L)).thenReturn(Optional.of(deck));
-
         Card card = mock(Card.class);
         when(cardFactory.create(any(CardTerm.class), any(CardDefinition.class), eq(5L))).thenReturn(card);
         when(cardRepository.save(card)).thenReturn(card);
@@ -60,17 +59,19 @@ class AddCardCommandHandlerTest {
         Long resultId = handler.handle(command);
 
         assertEquals(20L, resultId);
-        verify(cardRepository).save(card);
-        verify(activityLogService).logCardAdded(20L, 5L, 1L, "term");
+        verify(eventPublisher).publish(argThat(event -> {
+            CardAdded e = (CardAdded) event;
+            return e.cardId().equals(20L) && e.deckId().equals(5L)
+                    && e.term().equals("term");
+        }));
     }
 
     @Test
     void shouldThrowWhenUserNotFound() {
         AddCardCommand command = new AddCardCommand(5L, "term", "def", "missing@example.com");
         when(userRepository.findByEmail(new Email("missing@example.com"))).thenReturn(Optional.empty());
-
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
-        verify(cardRepository, never()).save(any());
+        verify(eventPublisher, never()).publish(any());
     }
 
     @Test
@@ -79,7 +80,6 @@ class AddCardCommandHandlerTest {
         User user = mock(User.class);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
         when(deckRepository.findById(999L)).thenReturn(Optional.empty());
-
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
     }
 
@@ -89,12 +89,10 @@ class AddCardCommandHandlerTest {
         User user = mock(User.class);
         when(user.getId()).thenReturn(1L);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
-
         Deck deck = mock(Deck.class);
         when(deck.isOwnedBy(1L)).thenReturn(false);
         when(deckRepository.findById(5L)).thenReturn(Optional.of(deck));
-
         assertThrows(AccessDeniedError.class, () -> handler.handle(command));
-        verify(cardRepository, never()).save(any());
+        verify(eventPublisher, never()).publish(any());
     }
 }

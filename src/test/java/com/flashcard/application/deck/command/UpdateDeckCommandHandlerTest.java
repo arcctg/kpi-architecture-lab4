@@ -1,8 +1,9 @@
 package com.flashcard.application.deck.command;
 
-import com.flashcard.activitylog.ActivityLogService;
+import com.flashcard.application.port.EventPublisher;
 import com.flashcard.domain.error.AccessDeniedError;
 import com.flashcard.domain.error.EntityNotFoundError;
+import com.flashcard.domain.event.DeckUpdated;
 import com.flashcard.domain.model.Deck;
 import com.flashcard.domain.model.User;
 import com.flashcard.domain.repository.DeckRepository;
@@ -20,24 +21,23 @@ class UpdateDeckCommandHandlerTest {
 
     private DeckRepository deckRepository;
     private UserRepository userRepository;
-    private ActivityLogService activityLogService;
+    private EventPublisher eventPublisher;
     private UpdateDeckCommandHandler handler;
 
     @BeforeEach
     void setUp() {
         deckRepository = mock(DeckRepository.class);
         userRepository = mock(UserRepository.class);
-        activityLogService = mock(ActivityLogService.class);
-        handler = new UpdateDeckCommandHandler(deckRepository, userRepository, activityLogService);
+        eventPublisher = mock(EventPublisher.class);
+        handler = new UpdateDeckCommandHandler(deckRepository, userRepository, eventPublisher);
     }
 
     @Test
-    void shouldUpdateDeckAndReturnId() {
+    void shouldUpdateDeckAndPublishEvent() {
         UpdateDeckCommand command = new UpdateDeckCommand(5L, "New Title", "New Desc", "user@example.com");
         User user = mock(User.class);
         when(user.getId()).thenReturn(1L);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
-
         Deck deck = mock(Deck.class);
         when(deck.isOwnedBy(1L)).thenReturn(true);
         when(deckRepository.findById(5L)).thenReturn(Optional.of(deck));
@@ -47,18 +47,18 @@ class UpdateDeckCommandHandlerTest {
         Long resultId = handler.handle(command);
 
         assertEquals(5L, resultId);
-        verify(deck).updateTitle(any());
-        verify(deck).updateDescription("New Desc");
-        verify(deckRepository).save(deck);
-        verify(activityLogService).logDeckUpdated(5L, 1L, "New Title");
+        verify(eventPublisher).publish(argThat(event -> {
+            DeckUpdated e = (DeckUpdated) event;
+            return e.deckId().equals(5L) && e.newTitle().equals("New Title");
+        }));
     }
 
     @Test
     void shouldThrowWhenUserNotFound() {
         UpdateDeckCommand command = new UpdateDeckCommand(5L, "Title", "Desc", "missing@example.com");
         when(userRepository.findByEmail(new Email("missing@example.com"))).thenReturn(Optional.empty());
-
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
+        verify(eventPublisher, never()).publish(any());
     }
 
     @Test
@@ -67,7 +67,6 @@ class UpdateDeckCommandHandlerTest {
         User user = mock(User.class);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
         when(deckRepository.findById(999L)).thenReturn(Optional.empty());
-
         assertThrows(EntityNotFoundError.class, () -> handler.handle(command));
     }
 
@@ -77,12 +76,10 @@ class UpdateDeckCommandHandlerTest {
         User user = mock(User.class);
         when(user.getId()).thenReturn(1L);
         when(userRepository.findByEmail(new Email("user@example.com"))).thenReturn(Optional.of(user));
-
         Deck deck = mock(Deck.class);
         when(deck.isOwnedBy(1L)).thenReturn(false);
         when(deckRepository.findById(5L)).thenReturn(Optional.of(deck));
-
         assertThrows(AccessDeniedError.class, () -> handler.handle(command));
-        verify(deckRepository, never()).save(any());
+        verify(eventPublisher, never()).publish(any());
     }
 }
