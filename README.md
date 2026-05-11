@@ -114,16 +114,17 @@ curl -X POST http://localhost:8080/api/decks/1/cards \
   -d '{"term":"JVM","definition":"Java Virtual Machine"}'
 ```
 
-## Project Structure (CQS Architecture)
+## Project Structure (CQS + Event-Driven Architecture)
 
-The project follows Domain-Driven Design principles with Command-Query Separation (CQS), structured into 4 strict layers:
+The project follows Domain-Driven Design principles with Command-Query Separation (CQS) and Event-Driven asynchronous communication (Lab 4):
 
 ```
 src/main/java/com/flashcard/
-├── domain/          # Pure business logic (Aggregates, Value Objects, Factories, Errors)
-├── application/     # Commands, Queries, and their Handlers. Read Repository interfaces
-├── infrastructure/  # JPA Adapters (Read/Write), Security config, Spring Boot setup
-└── presentation/    # REST Controllers, Input DTOs, Exception Handling
+├── domain/          # Pure business logic (Aggregates, Value Objects, Factories, Events)
+├── application/     # Commands, Queries, Handlers, and Event Publisher ports
+├── infrastructure/  # JPA Adapters, Spring Async Event Publisher, Security config
+├── presentation/    # REST Controllers, Input DTOs, Exception Handling
+└── activitylog/     # Auxiliary Component (Audit) acting as a side-effect subscriber
 ```
 
-For more details on the architecture, see [docs/analysis/lab3.md](docs/analysis/lab3.md).
+For more details on the architecture and synchronous vs asynchronous communication, see [docs/analysis/lab4.md](docs/analysis/lab4.md).
