@@ -17,3 +17,7 @@ jwt:
 
 server:
   port: 8080
+
+springdoc:
+  swagger-ui:
+    display-request-duration: true
